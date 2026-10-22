@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>排序算法可视化演示</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .bar { transition: height 0.1s ease, background-color 0.1s ease; }
+    .compare { background-color: #fbbf24 !important; } /* 黄色-比较中 */
+    .swap { background-color: #ef4444 !important; }    /* 红色-交换中 */
+    .sorted { background-color: #22c55e !important; }  /* 绿色-已排序 */
+    .pivot { background-color: #a855f7 !important; }   /* 紫色-基准值 */
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">排序算法可视化演示</h1>
+    
+    <!-- 算法选择 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <h2 class="text-lg font-semibold text-gray-700 mb-3">选择排序算法</h2>
+      <div class="flex flex-wrap gap-2" id="algorithm-buttons">
+        <button data-algo="bubble" class="algo-btn px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600 transition">冒泡排序</button>
+        <button data-algo="selection" class="algo-btn px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition">选择排序</button>
+        <button data-algo="insertion" class="algo-btn px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition">插入排序</button>
+        <button data-algo="quick" class="algo-btn px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition">快速排序</button>
+        <button data-algo="merge" class="algo-btn px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition">归并排序</button>
+        <button data-algo="heap" class="algo-btn px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300 transition">堆排序</button>
+      </div>
+    </div>
+
+    <!-- 控制面板 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <div class="flex flex-wrap items-center gap-4">
+        <button id="generate-btn" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">生成随机数组</button>
+        <button id="start-btn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">开始排序</button>
+        <button id="pause-btn" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition" disabled>暂停</button>
+        <button id="reset-btn" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">重置</button>
+        
+        <div class="flex items-center gap-2 ml-4">
+          <label class="text-gray-700">数组大小:</label>
+          <input type="range" id="size-slider" min="5" max="100" value="30" class="w-32">
+          <span id="size-value" class="text-gray-600 w-8">30</span>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <label class="text-gray-700">排序速度:</label>
+          <input type="range" id="speed-slider" min="1" max="100" value="50" class="w-32">
+          <span id="speed-value" class="text-gray-600 w-8">中</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="text-center">
+          <p class="text-gray-500 text-sm">当前算法</p>
+          <p id="current-algo" class="text-xl font-bold text-blue-600">冒泡排序</p>
+        </div>
+        <div class="text-center">
+          <p class="text-gray-500 text-sm">比较次数</p>
+          <p id="compare-count" class="text-xl font-bold text-yellow-600">0</p>
+        </div>
+        <div class="text-center">
+          <p class="text-gray-500 text-sm">交换次数</p>
+          <p id="swap-count" class="text-xl font-bold text-red-600">0</p>
+        </div>
+        <div class="text-center">
+          <p class="text-gray-500 text-sm">时间复杂度</p>
+          <p id="time-complexity" class="text-xl font-bold text-green-600">O(n²)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 可视化区域 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <div id="visualizer" class="flex items-end justify-center gap-[2px] h-80 border-b-2 border-gray-200"></div>
+    </div>
+
+    <!-- 算法说明 -->
+    <div class="bg-white rounded-lg shadow p-4">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">算法说明</h3>
+      <p id="algo-desc" class="text-gray-600">
+        冒泡排序：通过相邻元素两两比较交换，将最大元素逐步"冒泡"到数组末尾。实现简单但效率低，适合教学和小数据量场景。
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // 全局状态
+    let array = [];
+    let arraySize = 30;
+    let delayTime = 50;
+    let currentAlgo = 'bubble';
+    let isRunning = false;
+    let isPaused = false;
+    let pauseResolve = null;
+    let compareCount = 0;
+    let swapCount = 0;
+    let sortAbort = false;
+
+    // DOM元素
+    const visualizer = document.getElementById('visualizer');
+    const generateBtn = document.getElementById('generate-btn');
+    const startBtn = document.getElementById('start-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const sizeSlider = document.getElementById('size-slider');
+    const sizeValue = document.getElementById('size-value');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
+    const compareCountEl = document.getElementById('compare-count');
+    const swapCountEl = document.getElementById('swap-count');
+    const currentAlgoEl = document.getElementById('current-algo');
+    const timeComplexityEl = document.getElementById('time-complexity');
+    const algoDescEl = document.getElementById('algo-desc');
+    const algoButtons = document.querySelectorAll('.algo-btn');
+
+    // 算法信息映射
+    const algoInfo = {
+      bubble: { name:'冒泡排序', complexity:'O(n²)', desc:'冒泡排序：通过相邻元素两两比较交换，将最大元素逐步"冒泡"到数组末尾。实现简单但效率低，适合教学和小数据量场景。' },
+      selection: { name:'选择排序', complexity:'O(n²)', desc:'选择排序：每一轮从未排序区间选出最小元素，放到已排序区间末尾。交换次数少，但整体效率依然偏低，适合小数据量。' },
+      insertion: { name:'插入排序', complexity:'O(n²)', desc:'插入排序：类似整理扑克牌，将元素逐个插入到已排序序列的正确位置。对近乎有序的数据排序速度极快，适合小数据、基本有序的场景。' },
+      quick: { name:'快速排序', complexity:'平均O(n log n)', desc:'快速排序：基于分治思想，选择基准值将数组分成两部分，递归排序。实际运行中是通用排序里速度最快的算法之一，适用于绝大多数通用排序场景。' },
+      merge: { name:'归并排序', complexity:'O(n log n)', desc:'归并排序：稳定排序算法，采用分治思想，将数组拆分成子数组排序后再合并。最坏情况也保持O(n log n)效率，适合需要排序稳定性的场景。' },
+      heap: { name:'堆排序', complexity:'O(n log n)', desc:'堆排序：基于堆数据结构，原地排序，不需要额外大量内存空间。最坏情况效率不退化，适合内存受限的场景。' }
+    };
+
+    // 初始化
+    init();
+
+    function init() {
+      generateArray();
+      updateAlgoInfo();
+    }
+
+    // 生成随机数组
+    function generateArray() {
+      array = [];
+      for (let i = 0; i < arraySize; i++) {
+        array.push(Math.floor(Math.random() * 250) + 10);
+      }
+      renderBars();
+      resetStats();
+    }
+
+    // 渲染柱子
+    function renderBars() {
+      visualizer.innerHTML = '';
+      const barWidth = Math.max(2, (visualizer.clientWidth - arraySize * 2) / arraySize);
+      array.forEach((value) => {
+        const bar = document.createElement('div');
+        bar.className = 'bar bg-blue-400 rounded-t';
+        bar.style.height = `${value}px`;
+        bar.style.width = `${barWidth}px`;
+        visualizer.appendChild(bar);
+      });
+    }
+
+    function updateBar(index, value) {
+      const bar = visualizer.children[index];
+      if (bar) bar.style.height = `${value}px`;
+    }
+
+    function addClass(index, className) {
+      const bar = visualizer.children[index];
+      if (bar) bar.classList.add(className);
+    }
+
+    function removeClass(index, className) {
+      const bar = visualizer.children[index];
+      if (bar) bar.classList.remove(className);
+    }
+
+    function clearAllClasses() {
+      Array.from(visualizer.children).forEach(bar => {
+        bar.classList.remove('compare', 'swap', 'sorted', 'pivot');
+      });
+    }
+
+    function markSorted(index) {
+      addClass(index, 'sorted');
+    }
+
+    // 延迟+暂停控制
+    function delay() {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          if (isPaused) pauseResolve = resolve;
+          else resolve();
+        }, delayTime);
+      });
+    }
+
+    async function checkPause() {
+      if (sortAbort) throw new Error('abort');
+      if (isPaused) await new Promise(resolve => { pauseResolve = resolve; });
+      if (sortAbort) throw new Error('abort');
+    }
+
+    function swap(arr, i, j) {
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      updateBar(i, arr[i]);
+      updateBar(j, arr[j]);
+    }
+
+    function updateStats() {
+      compareCountEl.textContent = compareCount;
+      swapCountEl.textContent = swapCount;
+    }
+
+    function resetStats() {
+      compareCount = 0;
+      swapCount = 0;
+      updateStats();
+      clearAllClasses();
+    }
+
+    function updateAlgoInfo() {
+      const info = algoInfo[currentAlgo];
+      currentAlgoEl.textContent = info.name;
+      timeComplexityEl.textContent = info.complexity;
+      algoDescEl.textContent = info.desc;
+    }
+
+    function setButtonsDisabled(disabled) {
+      generateBtn.disabled = disabled;
+      startBtn.disabled = disabled;
+      sizeSlider.disabled = disabled;
+      algoButtons.forEach(btn => btn.disabled = disabled);
+      pauseBtn.disabled = !disabled;
+      if (!disabled) {
+        pauseBtn.textContent = '暂停';
+        isPaused = false;
+      }
+    }
+
+    // ========== 6种排序算法实现 ==========
+
+    // 1. 冒泡排序
+    async function bubbleSort() {
+      const arr = [...array];
+      const n = arr.length;
+      for (let i = 0; i < n - 1; i++) {
+        for (let j = 0; j < n - i - 1; j++) {
+          await checkPause();
+          addClass(j, 'compare');
+          addClass(j + 1, 'compare');
+          compareCount++;
+          updateStats();
+          await delay();
+          
+          if (arr[j] > arr[j + 1]) {
+            swap(arr, j, j + 1);
+            swapCount++;
+            updateStats();
+            addClass(j, 'swap');
+            addClass(j + 1, 'swap');
+            await delay();
+          }
+          removeClass(j, 'compare');
+          removeClass(j + 1, 'compare');
+          removeClass(j, 'swap');
+          removeClass(j + 1, 'swap');
+        }
+        markSorted(n - i - 1);
+      }
+      markSorted(0);
+      array = arr;
+    }
+
+    // 2. 选择排序
+    async function selectionSort() {
+      const arr = [...array];
+      const n = arr.length;
+      for (let i = 0; i < n - 1; i++) {
+        let minIdx = i;
+        addClass(minIdx, 'pivot');
+        for (let j = i + 1; j < n; j++) {
+          await checkPause();
+          addClass(j, 'compare');
+          compareCount++;
+          updateStats();
+          await delay();
+          if (arr[j] < arr[minIdx]) {
+            removeClass(minIdx, 'pivot');
+            minIdx = j;
+            addClass(minIdx, 'pivot');
+          }
+          removeClass(j, 'compare');
+        }
+        if (minIdx !== i) {
+          swap(arr, i, minIdx);
+          swapCount++;
+          updateStats();
+          addClass(i, 'swap');
+          addClass(minIdx, 'swap');
+          await delay();
+          removeClass(i, 'swap');
+          removeClass(minIdx, 'swap');
+        }
+        removeClass(minIdx, 'pivot');
+        markSorted(i);
+      }
+      markSorted(n - 1);
+      array = arr;
+    }
+
+    // 3. 插入排序
+    async function insertionSort() {
+      const arr = [...array];
+      const n = arr.length;
+      markSorted(0);
+      for (let i = 1; i < n; i++) {
+        let key = arr[i];
+        let j = i - 1;
+        addClass(i, 'pivot');
+        compareCount++;
+        updateStats();
+        await delay();
+        while (j >= 0 && arr[j] > key) {
+          await checkPause();
+          addClass(j, 'compare');
+          compareCount++;
+          updateStats();
+          arr[j + 1] = arr[j];
+          updateBar(j + 1, arr[j]);
+          swapCount++;
+          updateStats();
+          addClass(j + 1, 'swap');
+          await delay();
+          removeClass(j, 'compare');
+          removeClass(j + 1, 'swap');
+          j--;
+        }
+        arr[j + 1] = key;
+        updateBar(j + 1, key);
+        removeClass(i, 'pivot');
+        for (let k = 0; k <= i; k++) markSorted(k);
+      }
+      array = arr;
+    }
+
+    // 4. 快速排序
+    async function quickSort() {
+      const arr = [...array];
+      await quickSortHelper(arr, 0, arr.length - 1);
+      for (let i = 0; i < arr.length; i++) markSorted(i);
+      array = arr;
+    }
+
+    async function quickSortHelper(arr, low, high) {
+      if (low < high) {
+        const pi = await partition(arr, low, high);
+        await quickSortHelper(arr, low, pi - 1);
+        await quickSortHelper(arr, pi + 1, high);
+      } else if (low === high) {
+        markSorted(low);
+      }
+    }
+
+    async function partition(arr, low, high) {
+      const pivot = arr[high];
+      addClass(high, 'pivot');
+      let i = low - 1;
+      for (let j = low; j < high; j++) {
+        await checkPause();
+        addClass(j, 'compare');
+        compareCount++;
+        updateStats();
+        await delay();
+        if (arr[j] < pivot) {
+          i++;
+          if (i !== j) {
+            swap(arr, i, j);
+            swapCount++;
+            updateStats();
+            addClass(i, 'swap');
+            addClass(j, 'swap');
+            await delay();
+            removeClass(i, 'swap');
+            removeClass(j, 'swap');
+          }
+        }
+        removeClass(j, 'compare');
+      }
+      swap(arr, i + 1, high);
+      swapCount++;
+      updateStats();
+      addClass(i + 1, 'swap');
+      await delay();
+      removeClass(i + 1, 'swap');
+      removeClass(high, 'pivot');
+      markSorted(i + 1);
+      return i + 1;
+    }
+
+    // 5. 归并排序
+    async function mergeSort() {
+      const arr = [...array];
+      await mergeSortHelper(arr, 0, arr.length - 1);
+      for (let i = 0; i < arr.length; i++) markSorted(i);
+      array = arr;
+    }
+
+    async function mergeSortHelper(arr, left, right) {
+      if (left < right) {
+        const mid = Math.floor((left + right) / 2);
+        await mergeSortHelper(arr, left, mid);
+        await mergeSortHelper(arr, mid + 1, right);
+        await merge(arr, left, mid, right);
+      }
+    }
+
+    async function merge(arr, left, mid, right) {
+      const leftArr = arr.slice(left, mid + 1);
+      const rightArr = arr.slice(mid + 1, right + 1);
+      let i = 0, j = 0, k = left;
+      while (i < leftArr.length && j < rightArr.length) {
+        await checkPause();
+        addClass(left + i, 'compare');
+        addClass(mid + 1 + j, 'compare');
+        compareCount++;
+        updateStats();
+        await delay();
+        if (leftArr[i] <= rightArr[j]) {
+          arr[k] = leftArr[i];
+          i++;
+        } else {
+          arr[k] = rightArr[j];
+          j++;
+          swapCount++;
+        }
+        updateBar(k, arr[k]);
+        addClass(k, 'swap');
+        await delay();
+        removeClass(left + i - 1, 'compare');
+        removeClass(mid + j, 'compare');
+        removeClass(k, 'swap');
+        k++;
+      }
+      while (i < leftArr.length) {
+        await checkPause();
+        arr[k] = leftArr[i];
+        updateBar(k, arr[k]);
+        addClass(k, 'swap');
+        await delay();
+        removeClass(k, 'swap');
+        i++; k++;
+      }
+      while (j < rightArr.length) {
+        await checkPause();
+        arr[k] = rightArr[j];
+        updateBar(k, arr[k]);
+        addClass(k, 'swap');
+        await delay();
+        removeClass(k, 'swap');
+        j++; k++;
+      }
+    }
+
+    // 6. 堆排序
+    async function heapSort() {
+      const arr = [...array];
+      const n = arr.length;
+      for (let i = Math.floor(n / 2) - 1; i >= 0; i--) {
+        await heapify(arr, n, i);
+      }
+      for (let i = n - 1; i > 0; i--) {
+        await checkPause();
+        swap(arr, 0, i);
+        swapCount++;
+        updateStats();
+        addClass(0, 'swap');
+        addClass(i, 'swap');
+        await delay();
+        removeClass(0, 'swap');
+        removeClass(i, 'swap');
+        markSorted(i);
+        await heapify(arr, i, 0);
+      }
+      markSorted(0);
+      array = arr;
+    }
+
+    async function heapify(arr, n, i) {
+      let largest = i;
+      const left = 2 * i + 1;
+      const right = 2 * i + 2;
+      addClass(largest, 'pivot');
+      
+      if (left < n) {
+        await checkPause();
+        addClass(left, 'compare');
+        compareCount++;
+        updateStats();
+        await delay();
+        if (arr[left] > arr[largest]) {
+          removeClass(largest, 'pivot');
+          largest = left;
+          addClass(largest, 'pivot');
+        }
+        removeClass(left, 'compare');
+      }
+      
+      if (right < n) {
+        await checkPause();
+        addClass(right, 'compare');
+        compareCount++;
+        updateStats();
+        await delay();
+        if (arr[right] > arr[largest]) {
+          removeClass(largest, 'pivot');
+          largest = right;
+          addClass(largest, 'pivot');
+        }
+        removeClass(right, 'compare');
+      }
+      
+      if (largest !== i) {
+        swap(arr, i, largest);
+        swapCount++;
+        updateStats();
+        addClass(i, 'swap');
+        addClass(largest, 'swap');
+        await delay();
+        removeClass(i, 'swap');
+        removeClass(largest, 'swap');
+        removeClass(largest, 'pivot');
+        await heapify(arr, n, largest);
+      } else {
+        removeClass(largest, 'pivot');
+      }
+    }
+
+    // ========== 事件绑定 ==========
+
+    // 切换算法
+    algoButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (isRunning) return;
+        currentAlgo = btn.dataset.algo;
+        algoButtons.forEach(b => {
+          b.classList.remove('bg-blue-500', 'text-white');
+          b.classList.add('bg-gray-200', 'text-gray-700');
+        });
+        btn.classList.remove('bg-gray-200', 'text-gray-700');
+        btn.classList.add('bg-blue-500', 'text-white');
+        updateAlgoInfo();
+        resetStats();
+      });
+    });
+
+    generateBtn.addEventListener('click', () => {
+      if (isRunning) return;
+      generateArray();
+    });
+
+    startBtn.addEventListener('click', async () => {
+      if (isRunning) return;
+      isRunning = true;
+      sortAbort = false;
+      resetStats();
+      setButtonsDisabled(true);
+      try {
+        switch (currentAlgo) {
+          case 'bubble': await bubbleSort(); break;
+          case 'selection': await selectionSort(); break;
+          case 'insertion': await insertionSort(); break;
+          case 'quick': await quickSort(); break;
+          case 'merge': await mergeSort(); break;
+          case 'heap': await heapSort(); break;
+        }
+      } catch (e) {}
+      isRunning = false;
+      setButtonsDisabled(false);
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (!isRunning) return;
+      if (isPaused) {
+        isPaused = false;
+        pauseBtn.textContent = '暂停';
+        if (pauseResolve) pauseResolve();
+      } else {
+        isPaused = true;
+        pauseBtn.textContent = '继续';
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      sortAbort = true;
+      isPaused = false;
+      if (pauseResolve) pauseResolve();
+      isRunning = false;
+      setButtonsDisabled(false);
+      generateArray();
+    });
+
+    sizeSlider.addEventListener('input', () => {
+      if (isRunning) return;
+      arraySize = parseInt(sizeSlider.value);
+      sizeValue.textContent = arraySize;
+      generateArray();
+    });
+
+    speedSlider.addEventListener('input', () => {
+      const value = parseInt(speedSlider.value);
+      delayTime = Math.floor(150 - value * 1.4);
+      if (value < 30) speedValue.textContent = '慢';
+      else if (value < 70) speedValue.textContent = '中';
+      else speedValue.textContent = '快';
+    });
+
+    window.addEventListener('resize', () => {
+      if (!isRunning) renderBars();
+    });
+  </script>
+</body>
+</html>
